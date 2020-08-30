@@ -1,0 +1,99 @@
+---
+title: "Projekt_Moc_Testu"
+author: "Jakub Ignatik"
+date: "10 marca 2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Wprowadzenie
+
+Celem projektu jest sprawdzenie mocy test?w normalno?ci dla danych z rozk?adu t-Studenta. Wykorzystam dwa testy: test Shapiro-Wilka oraz Jarque-Bera.  
+Hipoteza: Podejrzewam, ?e wraz ze wzrostem liczby stopni swobody spada moc testu, gdy? rozk?ad t-Studenta wyostrza si?, oddalaj?c si? od rozk?adu normalnego. Z kolei wraz ze wzrostem liczby danych moc testu ro?nie, gdy? przy wi?kszej liczbie danych ?atwiej zauwa?y? odst?pstwo od rozk?adu normalnego. Je?li za? zwi?kszamy wsp??czynnik ufno?ci (zwi?ksza si? obszar krytyczny), to moc r?wnie? ro?nie, bo jest wi?ksza szansa, ?e wykres z fa?szyw? hipotez? trafi do obszaru krytycznego.  
+Dane: Rozwa?am dane o d?ugo?ci od 5 do 105. Stopnie swobody ustawi?em od 1 do 10, gdy? zauwa?y?em potem, ?e przy wy?szej liczbie stopni swobody moce testu oscyluj? na tyle blisko siebie, ?e zaciera si? widoczna r??nica mi?dzy nimi. Wybra?em cztery poziomy istotno?ci: 0.001, 0.01, 0.05 oraz 0.1. Liczb? symulacji ustawi?em na 1000.
+
+### Wizualizacja
+
+Na pocz?tku za?aduj? biblioteki, wprowadz? podane we wprowadzeniu warto?ci oraz stworz? ramk? danych dla kombinacji stopni swobody, poziom?w istotno?ci i d?ugo?ci danych.
+
+```{r pressure, message=FALSE, echo=TRUE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(tseries)
+
+set.seed(111)
+#ilo?? symulacji
+N <- 1000
+#stopnie swobody
+dfs <- seq(1,10,by=1)
+#poziomy istotno?ci
+alphas <- c(.001, .01, .05, .1)
+#d?ugo?ci pr?by
+sample_l <- seq(5,105,by=10)
+
+params <- expand.grid(dfs, alphas, sample_l)
+names(params) <- c("dfs", "alpha", "length")
+```
+
+Nast?pnie obliczam moce pierwszego testu (Shapiro-WIlka) i dodaj? je do wcze?niej utworzonej ramki danych.
+
+```{r}
+powers <- sapply(1:nrow(params), function(p){
+  df <- params[p, 1]
+  alpha <- params[p, 2]
+  l <- params[p, 3]
+  p_sim <-sapply(rep(df, N), function(x){
+    my_sample <- rt(l, df)
+    shapiro.test(my_sample)$p.value
+  })
+  mean(p_sim < alpha)
+})
+power_df <- bind_cols(params, power = powers)
+```
+
+Dla utworzonej ramki danych tworz? wykres. Otrzymuj? wykres dla testu Shapiro-Wilka.
+
+```{r}
+power_df %>% ggplot(aes(x = length, 
+                        y = power, 
+                        col = factor(dfs))) +
+  geom_line() +
+  facet_wrap(~alpha, ncol = 2)
+```
+
+Podobnie post?puj?, ?eby otrzyma? wykres dla testu Jarque-Bera. Jedyn? zmian? jest wprowadzenie w p?tli funkcji jarque.bera.test zamiast shpiro.test.
+
+```{r, echo=FALSE}
+powers <- sapply(1:nrow(params), function(p){
+  df <- params[p, 1]
+  alpha <- params[p, 2]
+  l <- params[p, 3]
+  p_sim <-sapply(rep(df, N), function(x){
+    my_sample <- rt(l, df)
+    jarque.bera.test(my_sample)$p.value
+  })
+  mean(p_sim < alpha)
+})
+power_df <- bind_cols(params, power = powers)
+
+power_df %>% ggplot(aes(x = length, 
+                        y = power, 
+                        col = factor(dfs))) +
+  geom_line() +
+  facet_wrap(~alpha, ncol = 2)
+```
+
+### Interpretacja
+
+W przypadku obu test?w potwierdza si? postawiona na pocz?tku hipoteza.  
+Najwi?ksz? moc maj? najmniejsze stopnie swobody. Na pocz?tku ka?dy stopie? swobody znacznie obni?a moc testu, ale przy wi?kszych ich ilo?ciach r??nice s? nieznaczne.
+R?wnie? liczba danych ma znaczenie - wida? wzrost liniowy na wy?szych stopniach swobody, natomiast na tych ni?szych stopniach swobody wzrost przypomina pot?gowy, a nawet logarytmiczny.  
+Sprawdzi?a si? te? hipoteza dotycz?ca wsp??czynnika ufno?ci. Im on jest wi?kszy, tym szybciej osi?gana jest moc testu bliska 1. Przyk?adowo, w te?cie Shapiro-Wilka przy wsp??czynniku ufno?ci r?wnym 0.001 moc testu bliska jeden wyst?puje przy ok. 60 danych, natomiast przy wsp??czynniku ufno?ci r?wnym 0.1, ta liczba wynosi ju? tylko jakie? 40 danych.  
+Na uproszczenie analizy mog?y mie? wp?yw niedu?y zakres pr?by oraz niedu?a liczba stopni swobody. Liczb symulacji r?wna 1000 raczej nie spowodowa?a du?ych uproszcze?, co sprawdzi?em, podnosz?c t? liczb? do 5000.
+
